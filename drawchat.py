@@ -3,7 +3,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 def plot_customer_demand(df, customer_name, customer_column, suppliers, 
-                         year_column='year', demand_ylim=None):
+                         year_column='year', demand_ylim=None,
+                         title_fontsize=14, axis_label_fontsize=12, 
+                         tick_fontsize=10, legend_fontsize=9, 
+                         legend_title_fontsize=10, value_label_fontsize=None,
+                         demand_label_fontsize=12):
     """
     Plot a combined chart with stacked bars for supplier volumes for all years (2022-2025).
     Overlay transparent bars (border only) for 'demand' column values for 2022-2024.
@@ -16,7 +20,15 @@ def plot_customer_demand(df, customer_name, customer_column, suppliers,
     suppliers (list): List of supplier column names for stacked bars
     year_column (str, optional): Name of the year column. Defaults to 'year'
     demand_ylim (tuple, optional): Y-axis limits for demand as (min, max)
+    title_fontsize (int, optional): Font size for chart title. Defaults to 14
+    axis_label_fontsize (int, optional): Font size for axis labels. Defaults to 12
+    tick_fontsize (int, optional): Font size for axis tick labels. Defaults to 10
+    legend_fontsize (int, optional): Font size for legend items. Defaults to 9
+    legend_title_fontsize (int, optional): Font size for legend title. Defaults to 10
+    value_label_fontsize (int, optional): Font size for value labels on bars. If None, auto-calculated
+    demand_label_fontsize (int, optional): Font size for demand value labels. Defaults to 12
     """
+
     # Validate required columns exist, including hardcoded 'demand'
     required_columns = [customer_column, year_column, 'demand'] + suppliers
     missing_columns = [col for col in required_columns if col not in df.columns]
@@ -27,7 +39,7 @@ def plot_customer_demand(df, customer_name, customer_column, suppliers,
     if customer_name not in df[customer_column].values:
         available_customers = sorted(df[customer_column].unique())
         raise ValueError(f"Customer '{customer_name}' not found in column '{customer_column}'. "
-                         f"Available customers: {available_customers}")
+                        f"Available customers: {available_customers}")
     
     # Verify suppliers exist in dataframe
     missing_suppliers = [sup for sup in suppliers if sup not in df.columns]
@@ -48,7 +60,7 @@ def plot_customer_demand(df, customer_name, customer_column, suppliers,
         """Generate n distinct colors"""
         if n <= 10:
             base_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', 
-                           '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
+                          '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
             return base_colors[:n]
         else:
             import matplotlib.cm as cm
@@ -68,7 +80,7 @@ def plot_customer_demand(df, customer_name, customer_column, suppliers,
     bar_width = 0.6
     x = np.arange(n_years)
     
-    # Create the plot - THIS IS ALREADY CORRECT!
+    # Create the plot
     fig_width = max(12, len(suppliers))
     fig, ax1 = plt.subplots(figsize=(fig_width, 9))
     
@@ -78,13 +90,13 @@ def plot_customer_demand(df, customer_name, customer_column, suppliers,
     
     for j, supplier in enumerate(suppliers):
         values = np.array([customer_df[customer_df[year_column] == year][supplier].iloc[0] 
-                           if year in customer_df[year_column].values and not customer_df[customer_df[year_column] == year].empty
-                           else 0 for year in years])
+                          if year in customer_df[year_column].values and not customer_df[customer_df[year_column] == year].empty
+                          else 0 for year in years])
         
         bars = ax1.bar(x, values, bar_width, bottom=bottom, 
-                       label=supplier.replace('_', ' ').title(), color=supplier_colors[j])
+                      label=supplier.replace('_', ' ').title(), color=supplier_colors[j])
         
-        # Add value labels on each stack (only if value > 0)
+        # Add value labels on each stack (only if value > 0) with custom font size
         for i, (bar, value) in enumerate(zip(bars, values)):
             if value > 0:
                 label_y = bottom[i] + value / 2
@@ -93,40 +105,45 @@ def plot_customer_demand(df, customer_name, customer_column, suppliers,
                 show_label = value > total_height * 0.05
                 
                 if show_label:
-                    font_size = max(6, min(10, 80//len(suppliers)))
+                    # Use custom font size or auto-calculate
+                    if value_label_fontsize is not None:
+                        font_size = value_label_fontsize
+                    else:
+                        font_size = max(6, min(10, 80//len(suppliers)))
+                    
                     ax1.text(bar.get_x() + bar.get_width()/2, label_y, 
-                             f'{value:.0f}',
-                             ha='center', va='center', 
-                             fontsize=font_size,
-                             fontweight='bold',
-                             color='white' if value > total_height * 0.15 else 'black',
-                             bbox=dict(boxstyle='round,pad=0.2', 
-                                      facecolor='black' if value > total_height * 0.15 else 'white',
-                                      alpha=0.7, edgecolor='none'))
+                            f'{value:.0f}',
+                            ha='center', va='center', 
+                            fontsize=font_size,
+                            fontweight='bold',
+                            color='white' if value > total_height * 0.15 else 'black',
+                            bbox=dict(boxstyle='round,pad=0.2', 
+                                    facecolor='black' if value > total_height * 0.15 else 'white',
+                                    alpha=0.7, edgecolor='none'))
         
         bottom += values
         max_demand = max(max_demand, bottom.max())
     
     # Add transparent demand bars for 2022-2024
     demand_values = np.array([customer_df[customer_df[year_column] == year]['demand'].iloc[0] 
-                              if year in customer_df[year_column].values and not customer_df[customer_df[year_column] == year].empty
-                              else 0 for year in years])
+                             if year in customer_df[year_column].values and not customer_df[customer_df[year_column] == year].empty
+                             else 0 for year in years])
     
     for i, year in enumerate(years):
         if year in [2022, 2023, 2024]:
             demand_value = demand_values[i]
             if pd.notna(demand_value) and demand_value > 0:
                 demand_bar = ax1.bar(x[i], demand_value, bar_width, 
-                                     facecolor='none', edgecolor='blue', linewidth=0.3, 
-                                     label='Demand (2022-2024)' if i == 0 else None)
-                # Add value label above the bar
+                                    facecolor='none', edgecolor='blue', linewidth=0.3, 
+                                    label='Demand (2022-2024)' if i == 0 else None)
+                # Add value label above the bar with custom font size
                 ax1.text(x[i], demand_value + (demand_value * 0.05), 
-                         f'{demand_value:.0f}',
-                         ha='center', va='bottom', fontsize=12, fontweight='bold',
-                         color='blue')
+                        f'{demand_value:.0f}',
+                        ha='center', va='bottom', fontsize=demand_label_fontsize, fontweight='bold',
+                        color='blue')
                 max_demand = max(max_demand, demand_value)
-            # else: # You can uncomment this if you want to see warnings about missing demand
-            #     print(f"Warning: Demand value for {year} is NaN or zero. No demand bar plotted.")
+            else:
+                print(f"Warning: Demand value for {year} is NaN or zero. No demand bar plotted.")
     
     # Plot demand bar for 2025 at the same position with transparent fill and border
     if 2025 in years:
@@ -136,26 +153,26 @@ def plot_customer_demand(df, customer_name, customer_column, suppliers,
             demand_value = year_data['demand'].iloc[0]
             if pd.notna(demand_value):
                 demand_bar = ax1.bar(x[idx_2025], demand_value, bar_width, 
-                                     facecolor='none', edgecolor='red', linewidth=2, 
-                                     label='2025 Demand')
-                # Existing value label above the bar
+                                    facecolor='none', edgecolor='red', linewidth=2, 
+                                    label='2025 Demand')
+                # Existing value label above the bar with custom font size
                 ax1.text(x[idx_2025], demand_value + (demand_value * 0.05), 
-                         f'{demand_value:.0f}',
-                         ha='center', va='bottom', fontsize=12, fontweight='bold',
-                         color='red')
-                
+                        f'{demand_value:.0f}',
+                        ha='center', va='bottom', fontsize=demand_label_fontsize, fontweight='bold',
+                        color='red')
+               
                 max_demand = max(max_demand, demand_value)
-            # else: # You can uncomment this if you want to see warnings about missing demand
-            #     print("Warning: Demand value for 2025 is NaN. Demand bar will not be plotted.")
-    # else: # You can uncomment this if you want to see warnings about missing 2025 data
-    #     print("Warning: Year 2025 not found. Demand bar will not be plotted.")
+            else:
+                print("Warning: Demand value for 2025 is NaN. Demand bar will not be plotted.")
+    else:
+        print("Warning: Year 2025 not found. Demand bar will not be plotted.")
     
-    # Customize primary y-axis (demand)
-    ax1.set_xlabel(year_column.title(), fontsize=12)
-    ax1.set_ylabel('Demand', color='black', fontsize=12)
+    # Customize primary y-axis (demand) with custom font sizes
+    ax1.set_xlabel(year_column.title(), fontsize=axis_label_fontsize)
+    ax1.set_ylabel('Demand', color='black', fontsize=axis_label_fontsize)
     ax1.set_xticks(x)
-    ax1.set_xticklabels(years, rotation=45 if len(str(years[0])) > 4 else 0)
-    ax1.tick_params(axis='y', labelcolor='black')
+    ax1.set_xticklabels(years, rotation=45 if len(str(years[0])) > 4 else 0, fontsize=tick_fontsize)
+    ax1.tick_params(axis='y', labelcolor='black', labelsize=tick_fontsize)
     ax1.grid(True, alpha=0.3)
     
     # Adjust demand Y-axis
@@ -163,28 +180,39 @@ def plot_customer_demand(df, customer_name, customer_column, suppliers,
         ax1.set_ylim(demand_ylim[0], demand_ylim[1])
     else:
         max_demand = max_demand if max_demand > 0 else 100
-        ax1.set_ylim(0, max_demand * 1.35)
+        ax1.set_ylim(0, max_demand * 1.1)
         
         import math
         tick_interval = max(1, math.ceil(max_demand / 10))
         ax1.set_yticks(np.arange(0, max_demand * 1.1 + tick_interval, tick_interval))
     
-    # Create legend
+    # Create legend with custom font sizes
     handles, labels = ax1.get_legend_handles_labels()
     ncols = min(6, max(2, len(handles) // 3))
     
     ax1.legend(handles, labels, 
-               title='Legend', loc='center right', bbox_to_anchor=(1, 0.9),
-               frameon=True, fancybox=True, shadow=True, ncol=ncols, fontsize=9)
+              title='Legend', 
+              loc='center right', 
+              bbox_to_anchor=(1, 0.9),
+              frameon=True, 
+              fancybox=True, 
+              shadow=True, 
+              ncol=ncols, 
+              fontsize=legend_fontsize,
+              title_fontsize=legend_title_fontsize)
     
-    fig.suptitle(f'Demand Analysis for {customer_name} total demand (mt)', # Use fig.suptitle for overall title
-                 fontsize=14, fontweight='bold', y=0.95) # Adjust y for title position
+    # Title with custom font size
+    plt.title(f'Demand Analysis for {customer_name} total demand (mt)', 
+              fontsize=title_fontsize, fontweight='bold', pad=20)
     
-    fig.subplots_adjust(bottom=0.18, right=0.85) # Adjust subplots to make space for legend
+    fig.subplots_adjust(bottom=0.18)
+    #plt.show()
+       
+    
     
     # REMOVE THIS LINE: plt.show() 
     # Instead, return the figure object
-    return fig,max_demand
+    return fig
 
 def plot_customer_demand_with_price(df, customer_name, customer_column, suppliers, 
                                    year_column='year', demand_ylim=None, price_ylim=None, 
@@ -490,7 +518,7 @@ def plot_customer_demand_with_price(df, customer_name, customer_column, supplier
             max_price = max(all_price_values)
             price_range = max_price - min_price
             if price_range > 0:
-                ax2.set_ylim(min_price - price_range * 0.2, max_price + price_range * 0.5)
+                ax2.set_ylim(min_price - price_range * 0.2, max_price + price_range * 0.2)
             else:
                 padding = abs(min_price) * 0.2 if min_price != 0 else 20
                 ax2.set_ylim(min_price - padding, max_price + padding)
@@ -500,7 +528,7 @@ def plot_customer_demand_with_price(df, customer_name, customer_column, supplier
         ax1.set_ylim(demand_ylim[0], demand_ylim[1])
     else:
         max_demand = max_demand if max_demand > 0 else 100
-        ax1.set_ylim(0, max_demand * 1.8)
+        ax1.set_ylim(0, max_demand * 1.1)
         
         import math
         tick_interval = max(1, math.ceil(max_demand / 10))
@@ -524,67 +552,91 @@ def plot_customer_demand_with_price(df, customer_name, customer_column, supplier
         ncols = 3
     
     # Position legend inside chart area at top right
-    legend = ax1.legend(all_handles, all_labels,
-                        title='Legend', 
-                        loc='upper right',
-                        frameon=True, 
-                        fancybox=True, 
-                        shadow=True, 
-                        fontsize=legend_fontsize,
-                        title_fontsize=legend_title_fontsize,
-                        ncol=ncols,
-                        columnspacing=0.8,
-                        handletextpad=0.5,
-                        borderaxespad=0.5,
-                        framealpha=0.95,
-                        facecolor='white',
-                        edgecolor='gray',
-                        bbox_to_anchor=(0.98, 0.98))
+    legend = ax1.legend(all_handles, all_labels, 
+                       title='Legend', 
+                       loc='upper right',
+                       frameon=True, 
+                       fancybox=True, 
+                       shadow=True, 
+                       fontsize=legend_fontsize,
+                       title_fontsize=legend_title_fontsize,
+                       ncol=ncols,
+                       columnspacing=0.8,
+                       handletextpad=0.5,
+                       borderaxespad=0.5,
+                       framealpha=0.95,
+                       facecolor='white',
+                       edgecolor='gray',
+                       bbox_to_anchor=(0.98, 0.98))
     
     legend.get_frame().set_linewidth(1.2)
     
-    plt.title(f'COV sale volumes & Pocket price to {customer_name}',
+    plt.title(f'COV sale volumes & Pocket price to {customer_name}', 
               fontsize=title_fontsize, fontweight='bold', pad=20)
     
     #plt.tight_layout()
+    #plt.show()
     
-    fig.subplots_adjust(bottom=0.18)
-    return fig,max_demand,max_price
+    
+    #fig.subplots_adjust(bottom=0.18)
+    return fig
 
 # Usage examples:
 
-# Example 1: Basic usage with required parameters
+# Example 1: Basic usage with default settings
 # plot_customer_demand_with_price(df, 
 #                                customer_name='ABC Company',
 #                                customer_column='tdi_customer',
 #                                suppliers=['covestro', 'wanhua', 'basf', 'mcns'])
 
-# Example 2: With custom year column
+# Example 2: With price columns and wider annotation spacing
 # plot_customer_demand_with_price(df, 
 #                                customer_name='ABC Company',
-#                                customer_column='client_name',
-#                                suppliers=['supplier1', 'supplier2', 'supplier3'],
-#                                year_column='fiscal_year')
+#                                customer_column='tdi_customer',
+#                                suppliers=['covestro', 'wanhua', 'basf', 'mcns'],
+#                                price_columns=['pp', 'covestro_price'],
+#                                annotation_spacing=25)
 
-# Example 3: With price columns and validation
+# Example 3: Multiple price lines with custom font sizes and spacing
 # plot_customer_demand_with_price(df, 
 #                                customer_name='ABC Company',
 #                                customer_column='tdi_customer',
 #                                suppliers=['covestro', 'wanhua', 'basf'],
-#                                demand_column='total_demand',
-#                                price_columns=['pp', 'covestro_price'])
+#                                price_columns=['pp', 'covestro_price', 'market_price'],
+#                                title_fontsize=16,
+#                                axis_label_fontsize=12,
+#                                tick_fontsize=10,
+#                                legend_fontsize=9,
+#                                price_annotation_fontsize=8,
+#                                annotation_spacing=30)
 
-# Example 4: Full customization
+# Example 4: Compact display for many price lines
 # plot_customer_demand_with_price(df, 
 #                                customer_name='ABC Company',
-#                                customer_column='customer_name',
-#                                suppliers=['sup1', 'sup2', 'sup3', 'sup4'],
-#                                year_column='year',
-#                                demand_column='demand',
-#                                demand_ylim=(0, 1000),
-#                                price_ylim=(50, 200),
-#                                price_columns=['price1', 'price2'],
-#                                price_colors=['red', 'blue'])
+#                                customer_column='tdi_customer',
+#                                suppliers=['covestro', 'wanhua', 'basf'],
+#                                price_columns=['pp', 'covestro_price', 'market_price', 'competitor_price'],
+#                                title_fontsize=14,
+#                                price_annotation_fontsize=7,
+#                                annotation_spacing=35,
+#                                demand_ylim=(0, 5000),
+#                                price_ylim=(100, 300))
+
+# Example 5: Large presentation format
+# plot_customer_demand_with_price(df, 
+#                                customer_name='ABC Company',
+#                                customer_column='tdi_customer',
+#                                suppliers=['covestro', 'wanhua', 'basf'],
+#                                price_columns=['pp', 'covestro_price'],
+#                                title_fontsize=20,
+#                                axis_label_fontsize=16,
+#                                tick_fontsize=14,
+#                                legend_fontsize=12,
+#                                legend_title_fontsize=14,
+#                                value_label_fontsize=12,
+#                                price_annotation_fontsize=12,
+#                                annotation_spacing=25)
+# 
 
 def plot_customer_business_plan(dataframe, customer_name, show_percentages=False,
                                               title_fontsize=16, axis_label_fontsize=13, 
@@ -732,3 +784,5 @@ def plot_customer_business_plan(dataframe, customer_name, show_percentages=False
 # Example 5: If you want percentages (only in enhanced version)
 # fig = plot_customer_business_plan(df, "FAR EAST FOAM VIETNAM", show_percentages=True)
 # plt.show()
+
+

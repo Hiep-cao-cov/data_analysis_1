@@ -30,12 +30,19 @@ def Visual_customer_demand():
     
     if st.button("Plot MDI Demand"):
         try:
-            chart_figure,max_demand_volume = drawchat.plot_customer_demand(
+            df = df_mdi[df_mdi['customer'] == mdi_customer_name]
+            max_demand = df['demand'].max()          
+            chart_figure= drawchat.plot_customer_demand(
                 df=df_mdi,
                 customer_name=mdi_customer_name,
                 customer_column='customer',
-                suppliers=mdi_suppliers
-            )
+                suppliers=mdi_suppliers,
+                demand_ylim=(0, max_demand*1.4),
+                title_fontsize=20, axis_label_fontsize=16, 
+                tick_fontsize=16, legend_fontsize=12, 
+                legend_title_fontsize=18, value_label_fontsize=14,
+                demand_label_fontsize=18
+                )
             st.pyplot(chart_figure)         
         except ValueError as e:
             st.error(str(e))
@@ -44,11 +51,18 @@ def Visual_customer_demand():
     
     if st.button("Plot TDI Demand"):
         try:
-            chart_figure,max_demand_volume = drawchat.plot_customer_demand(
+            df = df_tdi[df_tdi['customer'] == tdi_customer_name]
+            max_demand = df['demand'].max()
+            chart_figure = drawchat.plot_customer_demand(
                 df=df_tdi,
                 customer_name=tdi_customer_name,
                 customer_column='customer',
-                suppliers=tdi_suppliers
+                suppliers=tdi_suppliers,
+                demand_ylim=(0, max_demand*1.4),
+                title_fontsize=20, axis_label_fontsize=16, 
+                tick_fontsize=16, legend_fontsize=12, 
+                legend_title_fontsize=18, value_label_fontsize=14,
+                demand_label_fontsize=18
             )
             st.pyplot(chart_figure)    
         except ValueError as e:
@@ -61,11 +75,14 @@ def Visual_account_price_volume():
     
     if st.button("Plot MDI Demand"):
         try:
-            chart_figure,max_demand,max_price = drawchat.plot_customer_demand_with_price(
+            df = df_mdi[df_mdi['customer'] == mdi_customer_name]
+            max_demand = df['demand'].max()
+            max_price = df['pocket price'].max()     
+            chart_figure = drawchat.plot_customer_demand_with_price( 
                 df_mdi,mdi_customer_name,'customer',
                                 covestro_supplier,
-                                #demand_ylim=(0,800),
-                                #price_ylim=(0.5,3),
+                                demand_ylim=(0,max_demand*2),
+                                price_ylim=(0.5,max_price*1.5),
                                 price_columns=['pocket price','seap_pp','apac_pp'],
                                 price_colors=['red', 'green','blue'],
                                 title_fontsize=22, axis_label_fontsize=20, 
@@ -75,8 +92,7 @@ def Visual_account_price_volume():
                                 annotation_spacing=25
                                 )         
             st.pyplot(chart_figure)
-            st.write(f"Maximum demand volume: {max_demand}")         
-            st.write(f"Maximum price: {max_price}")
+            
         except ValueError as e:
             st.error(str(e))
     # Select TDI customer        
@@ -84,11 +100,14 @@ def Visual_account_price_volume():
     
     if st.button("Plot TDI Demand"):
         try:
-            chart_figure,max_demand,max_price = drawchat.plot_customer_demand_with_price(
+            df = df_tdi[df_tdi['customer'] == tdi_customer_name]
+            max_demand = df['demand'].max()
+            max_price = df['pocket price'].max()   
+            chart_figure = drawchat.plot_customer_demand_with_price(
                 df_tdi,tdi_customer_name,'customer',
                                 covestro_supplier,
-                                #demand_ylim=(0, 3800),
-                                #price_ylim=(0,3),
+                                demand_ylim=(0,max_demand*2),
+                                price_ylim=(0.5,max_price*1.5),
                                 price_columns=['pocket price','apac_pp'],
                                 price_colors=['red', 'green'],
                                 title_fontsize=22, axis_label_fontsize=20, 
@@ -98,8 +117,7 @@ def Visual_account_price_volume():
                                 annotation_spacing=25
                                 )
             st.pyplot(chart_figure)
-            st.write(f"Maximum demand volume: {max_demand}")         
-            st.write(f"Maximum price: {max_price}")    
+             
         except ValueError as e:
             st.error(str(e))
 def Visual_business_plan():
@@ -107,6 +125,7 @@ def Visual_business_plan():
     st.write("This feature is under development. Please check back later.")
         
 if __name__ == "__main__":
+    
     st.title('Creating Radio Buttons')
     type_chart = ('Customer Demand', 'Account price vs Volume', 'Business plan')
     type_chart = st.radio('Select Chart Type', type_chart, index=0)
@@ -116,6 +135,6 @@ if __name__ == "__main__":
         Visual_account_price_volume()
     else:
         Visual_business_plan()
-    
+  
     
     
