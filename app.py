@@ -12,7 +12,8 @@ sec_key = os.getenv("MY_SECRET_KEY")
 # Load data
 df_mdi = pd.read_csv('data/MDI_final.csv')
 df_tdi = pd.read_csv('data/TDI_final.csv')
-
+df_tdi_BP = pd.read_csv('data/TDI_BP_23_27.csv')
+df_mdi_BP = pd.read_csv('data/MDI_BP_23_26.csv')
 # Select MDI suppliers
 mdi_suppliers = ['covestro','tosoh', 'wanhua','kmc', 'basf', 'sabic','huntsman']
 
@@ -113,14 +114,41 @@ def Visual_account_price_volume(type_material='TDI'):
                                     legend_title_fontsize=16, value_label_fontsize=18,
                                     price_annotation_fontsize=16,
                                     annotation_spacing=25
-                                    )
+                                    ) 
                 st.pyplot(chart_figure)
             except ValueError as e:
                 st.error(str(e))
-def Visual_business_plan():
-    st.write("This feature is under development. Please check back later.")
+def Visual_business_plan(type_material='TDI'):
+    if type_material == 'MDI':
+        mdi_customer_name = st.selectbox("Select Customer MDI", df_mdi['customer'].unique())
+        if st.button("Plot MDI Demand"):
+            try:         
+                chart_figure = drawchat.plot_customer_business_plan( 
+                    df_mdi_BP,mdi_customer_name, show_percentages=False,
+                    title_fontsize=22, axis_label_fontsize=20, 
+                    tick_fontsize=20, legend_fontsize=18, 
+                    value_label_fontsize=16
+                    )    
+                st.pyplot(chart_figure)
+            except ValueError as e:
+                st.error(str(e))
+    else:
+        tdi_customer_name = st.selectbox("Select Customer TDI", df_tdi['customer'].unique())
+        if st.button("Plot TDI Demand"):
+            try:         
+                chart_figure = drawchat.plot_customer_business_plan( 
+                    df_tdi_BP,tdi_customer_name, show_percentages=False,
+                    title_fontsize=22, axis_label_fontsize=20, 
+                    tick_fontsize=20, legend_fontsize=18, 
+                    value_label_fontsize=16
+                    )    
+                st.pyplot(chart_figure)
+            except ValueError as e:
+                st.error(str(e))
+   
         
 if __name__ == "__main__":
+   
     st.set_page_config(page_title="MDI and TDI Visualization")
     st.sidebar.title("Navigation")
     type_chart = st.sidebar.radio("Select type of chart", ["Customer Demand", "Account price vs Volume", "Business plan"], index=0)
@@ -142,7 +170,7 @@ if __name__ == "__main__":
     elif type_chart == 'Account price vs Volume':
         Visual_account_price_volume(type_material)
     else:
-        Visual_business_plan()
+        Visual_business_plan(type_material)
   
     
     

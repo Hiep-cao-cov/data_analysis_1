@@ -639,9 +639,9 @@ def plot_customer_demand_with_price(df, customer_name, customer_column, supplier
 # 
 
 def plot_customer_business_plan(dataframe, customer_name, show_percentages=False,
-                                              title_fontsize=16, axis_label_fontsize=13, 
-                                              tick_fontsize=11, legend_fontsize=12, 
-                                              value_label_fontsize=11):
+                                title_fontsize=16, axis_label_fontsize=13,
+                                tick_fontsize=11, legend_fontsize=12,
+                                value_label_fontsize=11):
     """
     Enhanced version with better text positioning. 
     By default shows VALUES, only shows percentages if explicitly requested.
@@ -709,10 +709,10 @@ def plot_customer_business_plan(dataframe, customer_name, show_percentages=False
             else:
                 text = f'{min_val:.0f}'  # SHOW ACTUAL VALUE
             
-            ax.text(i, min_val/2, text, 
-                   ha='center', va='center', fontweight='bold', 
-                   color='white', fontsize=value_label_fontsize, 
-                   bbox=dict(boxstyle="round,pad=0.2", facecolor='black', alpha=0.3))
+            ax.text(i, min_val/2, text,
+                    ha='center', va='center', fontweight='bold', 
+                    color='white', fontsize=value_label_fontsize, 
+                    bbox=dict(boxstyle="round,pad=0.2", facecolor='black', alpha=0.3))
         
         # Label for Base segment (middle segment)
         if base_val > min_height_for_text:
@@ -723,10 +723,10 @@ def plot_customer_business_plan(dataframe, customer_name, show_percentages=False
             else:
                 text = f'{base_val:.0f}'  # SHOW ACTUAL VALUE
                 
-            ax.text(i, min_val + base_val/2, text, 
-                   ha='center', va='center', fontweight='bold', 
-                   color='white', fontsize=value_label_fontsize,
-                   bbox=dict(boxstyle="round,pad=0.2", facecolor='black', alpha=0.3))
+            ax.text(i, min_val + base_val/2, text,
+                    ha='center', va='center', fontweight='bold', 
+                    color='white', fontsize=value_label_fontsize,
+                    bbox=dict(boxstyle="round,pad=0.2", facecolor='black', alpha=0.3))
         
         # Label for Max segment (top segment)
         if max_val > min_height_for_text:
@@ -737,10 +737,10 @@ def plot_customer_business_plan(dataframe, customer_name, show_percentages=False
             else:
                 text = f'{max_val:.0f}'  # SHOW ACTUAL VALUE
                 
-            ax.text(i, min_val + base_val + max_val/2, text, 
-                   ha='center', va='center', fontweight='bold', 
-                   color='white', fontsize=value_label_fontsize,
-                   bbox=dict(boxstyle="round,pad=0.2", facecolor='black', alpha=0.3))
+            ax.text(i, min_val + base_val + max_val/2, text,
+                    ha='center', va='center', fontweight='bold', 
+                    color='white', fontsize=value_label_fontsize,
+                    bbox=dict(boxstyle="round,pad=0.2", facecolor='black', alpha=0.3))
     
     # Customize the chart with custom font sizes
     ax.set_xlabel('Year', fontsize=axis_label_fontsize, fontweight='bold')
@@ -760,29 +760,3 @@ def plot_customer_business_plan(dataframe, customer_name, show_percentages=False
     ax.set_ylim(0, y_max * 1.15)
     
     return fig
-
-
-
-# Usage examples - ALL SHOW VALUES BY DEFAULT:
-
-# Example 1: Basic version - SHOWS VALUES
-# fig = plot_customer_business_plan(df, "FAR EAST FOAM VIETNAM")
-# plt.show()
-
-# Example 2: Enhanced version - SHOWS VALUES (default)
-# fig = plot_customer_business_plan(df, "FAR EAST FOAM VIETNAM")
-# plt.show()
-
-# Example 3: Enhanced version - EXPLICITLY SHOWS VALUES
-# fig = plot_customer_business_plan(df, "FAR EAST FOAM VIETNAM", show_percentages=False)
-# plt.show()
-
-# Example 4: Values only version - GUARANTEED TO SHOW VALUES
-# fig = plot_customer_business_plan(df, "FAR EAST FOAM VIETNAM")
-# plt.show()
-
-# Example 5: If you want percentages (only in enhanced version)
-# fig = plot_customer_business_plan(df, "FAR EAST FOAM VIETNAM", show_percentages=True)
-# plt.show()
-
-
