@@ -205,5 +205,3 @@ if __name__ == "__main__":
         Visual_account_price_volume(type_material, df_mdi, df_tdi)
     else:
         Visual_business_plan(type_material, df_mdi_BP, df_tdi_BP)
-    
-    

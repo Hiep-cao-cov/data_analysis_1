@@ -760,3 +760,233 @@ def plot_customer_business_plan(dataframe, customer_name, show_percentages=False
     ax.set_ylim(0, y_max * 1.15)
     
     return fig
+
+##########################################################################################################
+def plot_customer_demand1(df, customer_name, customer_column, suppliers, 
+                         year_column='year', demand_ylim=None,
+                         title_fontsize=14, axis_label_fontsize=12, 
+                         tick_fontsize=10, legend_fontsize=9, 
+                         legend_title_fontsize=10, value_label_fontsize=None,
+                         demand_label_fontsize=12):
+    """
+    Plot a combined chart with stacked bars for supplier volumes for all years (2022-2025).
+    Overlay transparent bars (border only) for 'demand' column values for 2022-2024.
+    For 2025, overlay a transparent 'demand' bar with 'demand: <value>' label.
+    
+    Parameters:
+    df (pd.DataFrame): Dataframe containing the data with 'demand' column
+    customer_name (str): Name of the customer to plot
+    customer_column (str): Name of the column containing customer names
+    suppliers (list): List of supplier column names for stacked bars
+    year_column (str, optional): Name of the year column. Defaults to 'year'
+    demand_ylim (tuple, optional): Y-axis limits for demand as (min, max)
+    title_fontsize (int, optional): Font size for chart title. Defaults to 14
+    axis_label_fontsize (int, optional): Font size for axis labels. Defaults to 12
+    tick_fontsize (int, optional): Font size for axis tick labels. Defaults to 10
+    legend_fontsize (int, optional): Font size for legend items. Defaults to 9
+    legend_title_fontsize (int, optional): Font size for legend title. Defaults to 10
+    value_label_fontsize (int, optional): Font size for value labels on bars. If None, auto-calculated
+    demand_label_fontsize (int, optional): Font size for demand value labels. Defaults to 12
+    """
+
+    # Validate required columns exist, including hardcoded 'demand'
+    required_columns = [customer_column, year_column, 'demand'] + suppliers
+    missing_columns = [col for col in required_columns if col not in df.columns]
+    if missing_columns:
+        raise ValueError(f"Missing required columns: {missing_columns}")
+    
+    # Verify customer exists
+    if customer_name not in df[customer_column].values:
+        available_customers = sorted(df[customer_column].unique())
+        raise ValueError(f"Customer '{customer_name}' not found in column '{customer_column}'. "
+                        f"Available customers: {available_customers}")
+    
+    # Verify suppliers exist in dataframe
+    missing_suppliers = [sup for sup in suppliers if sup not in df.columns]
+    if missing_suppliers:
+        raise ValueError(f"Supplier columns not found: {missing_suppliers}")
+    
+    # Filter dataframe for the specified customer
+    customer_df = df[df[customer_column] == customer_name].copy()
+    
+    if customer_df.empty:
+        raise ValueError(f"No data found for customer '{customer_name}' in column '{customer_column}'")
+    
+    # Sort by year to ensure proper bar alignment
+    customer_df = customer_df.sort_values(year_column)
+    
+    # Generate colors for suppliers
+    def generate_colors(n):
+        """Generate n distinct colors"""
+        if n <= 10:
+            base_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', 
+                          '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
+            return base_colors[:n]
+        else:
+            import matplotlib.cm as cm
+            colormap = cm.get_cmap('tab20')
+            return [colormap(i/n) for i in range(n)]
+    
+    supplier_colors = generate_colors(len(suppliers))
+    
+    # Get unique years
+    years = sorted(customer_df[year_column].unique())
+    n_years = len(years)
+    
+    if n_years == 0:
+        raise ValueError(f"No data found for customer '{customer_name}'")
+    
+    # Set up bar positions
+    bar_width = 0.6
+    x = np.arange(n_years)
+    
+    # Create the plot
+    fig_width = max(12, len(suppliers))
+    fig, ax1 = plt.subplots(figsize=(fig_width, 9))
+    
+    # Plot stacked bars for supplier volumes for all years
+    bottom = np.zeros(n_years)
+    max_demand = 0
+    
+    for j, supplier in enumerate(suppliers):
+        values = np.array([customer_df[customer_df[year_column] == year][supplier].iloc[0] 
+                          if year in customer_df[year_column].values and not customer_df[customer_df[year_column] == year].empty
+                          else 0 for year in years])
+        
+        bars = ax1.bar(x, values, bar_width, bottom=bottom, 
+                      label=supplier.replace('_', ' ').title(), color=supplier_colors[j])
+        
+        # Add percentage labels on each stack (only if value > 0) with custom font size
+        for i, (bar, value) in enumerate(zip(bars, values)):
+            if value > 0:
+                # Calculate total for this year (sum of current bottom + remaining suppliers)
+                year_data = customer_df[customer_df[year_column] == years[i]]
+                total_height = year_data[suppliers].sum(axis=1).iloc[0] if not year_data.empty else 0
+                
+                if total_height > 0:
+                    percentage = (value / total_height) * 100
+                    label_y = bottom[i] + value / 2
+                    show_label = value > total_height * 0.05
+                    
+                    if show_label:
+                        # Use custom font size or auto-calculate
+                        if value_label_fontsize is not None:
+                            font_size = value_label_fontsize
+                        else:
+                            font_size = max(6, min(10, 80//len(suppliers)))
+                        
+                        ax1.text(bar.get_x() + bar.get_width()/2, label_y, 
+                                f'{percentage:.1f}%',
+                                ha='center', va='center', 
+                                fontsize=font_size,
+                                fontweight='bold',
+                                color='white' if value > total_height * 0.15 else 'black',
+                                bbox=dict(boxstyle='round,pad=0.2', 
+                                        facecolor='black' if value > total_height * 0.15 else 'white',
+                                        alpha=0.7, edgecolor='none'))
+        
+        bottom += values
+        max_demand = max(max_demand, bottom.max())
+    
+    # Add total volume labels on top of each stacked bar
+    for i, year in enumerate(years):
+        year_data = customer_df[customer_df[year_column] == year]
+        if not year_data.empty:
+            total_vol = year_data[suppliers].sum(axis=1).iloc[0]
+            if total_vol > 0:
+                ax1.text(x[i], total_vol + (total_vol * 0.05), 
+                        f'{total_vol:.0f}',
+                        ha='center', va='bottom', 
+                        fontsize=demand_label_fontsize, 
+                        fontweight='bold',
+                        color='black',
+                        bbox=dict(boxstyle='round,pad=0.3', 
+                                facecolor='lightgray',
+                                alpha=0.8, edgecolor='black'))
+    
+    # Add transparent demand bars for 2022-2024
+    demand_values = np.array([customer_df[customer_df[year_column] == year]['demand'].iloc[0] 
+                             if year in customer_df[year_column].values and not customer_df[customer_df[year_column] == year].empty
+                             else 0 for year in years])
+    
+    for i, year in enumerate(years):
+        if year in [2022, 2023, 2024]:
+            demand_value = demand_values[i]
+            if pd.notna(demand_value) and demand_value > 0:
+                demand_bar = ax1.bar(x[i], demand_value, bar_width, 
+                                    facecolor='none', edgecolor='blue', linewidth=0.3, 
+                                    label='Demand (2022-2024)' if i == 0 else None)
+                # Add value label above the bar with custom font size
+                """
+                ax1.text(x[i], demand_value + (demand_value * 0.05), 
+                        f'{demand_value:.0f}',
+                        ha='center', va='bottom', fontsize=demand_label_fontsize, fontweight='bold',
+                        color='blue')
+                """
+                max_demand = max(max_demand, demand_value)
+            else:
+                print(f"Warning: Demand value for {year} is NaN or zero. No demand bar plotted.")
+    
+    # Plot demand bar for 2025 at the same position with transparent fill and border
+    if 2025 in years:
+        idx_2025 = years.index(2025)
+        year_data = customer_df[customer_df[year_column] == 2025]
+        if not year_data.empty:
+            demand_value = year_data['demand'].iloc[0]
+            if pd.notna(demand_value):
+                demand_bar = ax1.bar(x[idx_2025], demand_value, bar_width, 
+                                    facecolor='none', edgecolor='red', linewidth=2, 
+                                    label='2025 Demand')
+                # Existing value label above the bar with custom font size
+                ax1.text(x[idx_2025], demand_value + (demand_value * 0.05), 
+                        f'{demand_value:.0f}',
+                        ha='center', va='bottom', fontsize=demand_label_fontsize, fontweight='bold',
+                        color='red')
+               
+                max_demand = max(max_demand, demand_value)
+            else:
+                print("Warning: Demand value for 2025 is NaN. Demand bar will not be plotted.")
+    else:
+        print("Warning: Year 2025 not found. Demand bar will not be plotted.")
+    
+    # Customize primary y-axis (demand) with custom font sizes
+    ax1.set_xlabel(year_column.title(), fontsize=axis_label_fontsize)
+    ax1.set_ylabel('Demand', color='black', fontsize=axis_label_fontsize)
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(years, rotation=45 if len(str(years[0])) > 4 else 0, fontsize=tick_fontsize)
+    ax1.tick_params(axis='y', labelcolor='black', labelsize=tick_fontsize)
+    ax1.grid(True, alpha=0.3)
+    
+    # Adjust demand Y-axis
+    if demand_ylim:
+        ax1.set_ylim(demand_ylim[0], demand_ylim[1])
+    else:
+        max_demand = max_demand if max_demand > 0 else 100
+        ax1.set_ylim(0, max_demand * 1.1)
+        
+        import math
+        tick_interval = max(1, math.ceil(max_demand / 10))
+        ax1.set_yticks(np.arange(0, max_demand * 1.1 + tick_interval, tick_interval))
+    
+    # Create legend with custom font sizes
+    handles, labels = ax1.get_legend_handles_labels()
+    ncols = min(6, max(2, len(handles) // 3))
+    
+    ax1.legend(handles, labels, 
+              title='Legend', 
+              loc='center right', 
+              bbox_to_anchor=(1, 0.9),
+              frameon=True, 
+              fancybox=True, 
+              shadow=True, 
+              ncol=ncols, 
+              fontsize=legend_fontsize,
+              title_fontsize=legend_title_fontsize)
+    
+    # Title with custom font size
+    plt.title(f'Demand Analysis for {customer_name} total demand (mt)', 
+              fontsize=title_fontsize, fontweight='bold', pad=20)
+    
+    fig.subplots_adjust(bottom=0.18)
+    
+    return fig
