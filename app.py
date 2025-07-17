@@ -1,304 +1,204 @@
 import os
-import requests
-import streamlit as st
 import pandas as pd
+import streamlit as st
 import drawchat  # Assuming drawchat is a module in your project
+from dataclasses import dataclass, field
+from typing import Tuple, List, Dict, Optional
+from uuid import uuid4
 
-# Initialize default file paths
-DEFAULT_MDI_PATH = 'data/MDI_final.csv'
-DEFAULT_MDI_BP_PATH = 'data/MDI_BP_23_26.csv'
-DEFAULT_TDI_PATH = 'data/VN_TDI_final.csv'
-DEFAULT_TDI_BP_PATH = 'data/VN_TDI_BP_23_27.csv'
-
-DEFAULT_TW_TDI_BP_PATH = 'data/TW_TDI_BP_23_27.csv'
-DEFAULT_TW_TDI_PATH = 'data/TW_TDI_final.csv'
-
-# Load default data
-def load_default_data():
-    df_mdi = pd.read_csv(DEFAULT_MDI_PATH)
-    df_mdi_BP = pd.read_csv(DEFAULT_MDI_BP_PATH)
-    df_tdi = pd.read_csv(DEFAULT_TDI_PATH)
-    df_tdi_BP = pd.read_csv(DEFAULT_TDI_BP_PATH)
+@dataclass
+class Config:
+    """Configuration class for file paths and constants"""
+    DEFAULT_PATHS: Dict[str, str] = field(default_factory=lambda: {
+        'mdi': 'data/MDI_final.csv',
+        'mdi_bp': 'data/MDI_BP_23_26.csv',
+        'tdi': 'data/VN_TDI_final.csv',
+        'tdi_bp': 'data/VN_TDI_BP_23_27.csv',
+        'tw_tdi_bp': 'data/TW_TDI_BP_23_27.csv',
+        'tw_tdi': 'data/TW_TDI_final.csv'
+    })
     
-    return df_mdi, df_mdi_BP, df_tdi, df_tdi_BP
+    SUPPLIERS: Dict[str, List[str]] = field(default_factory=lambda: {
+        'mdi': ['covestro', 'tosoh', 'wanhua', 'kmc', 'basf', 'sabic', 'huntsman'],
+        'tdi': ['covestro', 'mcns', 'wanhua', 'basf', 'hanwha', 'sabic', 'other'],
+        'covestro': ['covestro']
+    })
+    
+    CHART_TYPES: List[str] = field(default_factory=lambda: ["Customer Demand", "Account price vs Volume", "Business plan"])
+    COUNTRIES: List[str] = field(default_factory=lambda: ["Vietnam", "Taiwan"])
+    MATERIALS: List[str] = field(default_factory=lambda: ["TDI", "MDI"])
 
-def load_tw_data():
-    df_tdi_TW_BP = pd.read_csv(DEFAULT_TW_TDI_BP_PATH)
-    df_tdi_TW = pd.read_csv(DEFAULT_TW_TDI_PATH)
-    return df_tdi_TW_BP, df_tdi_TW
+class DataLoader:
+    """Handles data loading and file uploads"""
+    
+    @staticmethod
+    def load_csv(file_path: str, uploaded_file=None) -> pd.DataFrame:
+        """Load CSV from file path or uploaded file"""
+        try:
+            if uploaded_file:
+                return pd.read_csv(uploaded_file)
+            return pd.read_csv(file_path)
+        except Exception as e:
+            st.error(f"Error loading file: {str(e)}")
+            return pd.DataFrame()
 
-# Select MDI suppliers
-mdi_suppliers = ['covestro', 'tosoh', 'wanhua', 'kmc', 'basf', 'sabic', 'huntsman']
+    @classmethod
+    def load_country_data(cls, country: str, config: Config) -> Tuple[pd.DataFrame, ...]:
+        """Load data based on country"""
+        if country == "Vietnam":
+            return (
+                cls.load_csv(config.DEFAULT_PATHS['mdi']),
+                cls.load_csv(config.DEFAULT_PATHS['mdi_bp']),
+                cls.load_csv(config.DEFAULT_PATHS['tdi']),
+                cls.load_csv(config.DEFAULT_PATHS['tdi_bp'])
+            )
+        return (
+            cls.load_csv(config.DEFAULT_PATHS['tw_tdi_bp']),
+            cls.load_csv(config.DEFAULT_PATHS['tw_tdi'])
+        )
 
-# Select TDI suppliers
-tdi_suppliers = ['covestro', 'mcns', 'wanhua', 'basf', 'hanwha', 'sabic', 'other']
+class Visualizer:
+    """Handles visualization logic"""
+    
+    @staticmethod
+    def get_chart_config(chart_type: str) -> Dict:
+        """Return configuration for different chart types"""
+        base_config = {
+            'title_fontsize': 20,
+            'axis_label_fontsize': 16,
+            'tick_fontsize': 16,
+            'legend_fontsize': 12,
+            'value_label_fontsize': 14
+        }
+        
+        if chart_type == "Account price vs Volume":
+            base_config.update({
+                'title_fontsize': 22,
+                'axis_label_fontsize': 20,
+                'tick_fontsize': 18,
+                'legend_fontsize': 16,
+                'legend_title_fontsize': 16,
+                'price_annotation_fontsize': 16,
+                'annotation_spacing': 25
+            })
+        elif chart_type == "Business plan":
+            base_config.update({
+                'title_fontsize': 22,
+                'axis_label_fontsize': 20,
+                'tick_fontsize': 20,
+                'legend_fontsize': 18,
+                'value_label_fontsize': 16
+            })
+        else:  # Customer Demand
+            base_config.update({
+                'legend_title_fontsize': 18
+            })
+        return base_config
 
-covestro_supplier = ['covestro']
+    @classmethod
+    def plot_chart(cls, chart_type: str, df: pd.DataFrame, customer_name: str, 
+                  material: str, config: Config, is_taiwan: bool = False) -> None:
+        """Plot chart based on type and material"""
+        try:
+            if df.empty or 'customer' not in df.columns:
+                st.error("DataFrame is empty or missing 'customer' column")
+                return
 
-def Visual_customer_demand(type_material, df_mdi, df_tdi):
-    if type_material == 'MDI':
-        # Select MDI customer
-        mdi_customer_name = st.selectbox("Select Customer MDI", df_mdi['customer'].unique())
-        if st.button("Plot MDI Demand"):
-            try:
-                df = df_mdi[df_mdi['customer'] == mdi_customer_name]
-                max_demand = df['demand'].max()
+            chart_config = cls.get_chart_config(chart_type)
+            df_filtered = df[df['customer'] == customer_name]
+            
+            if chart_type == "Customer Demand":
+                if 'demand' not in df.columns:
+                    st.error("Required 'demand' column not found in DataFrame")
+                    return
+                suppliers = config.SUPPLIERS['tdi' if material == 'TDI' else 'mdi']
+                max_demand = df_filtered['demand'].max() if not df_filtered.empty else 0
                 chart_figure = drawchat.plot_customer_demand1(
-                    df=df_mdi,
-                    customer_name=mdi_customer_name,
+                    df=df,
+                    customer_name=customer_name,
                     customer_column='customer',
-                    suppliers=mdi_suppliers,
-                    demand_ylim=(0, max_demand*1.4),
-                    title_fontsize=20, axis_label_fontsize=16,
-                    tick_fontsize=16, legend_fontsize=12,
-                    legend_title_fontsize=18, value_label_fontsize=14,
-                    demand_label_fontsize=18
+                    suppliers=suppliers,
+                    demand_ylim=(0, max_demand * 1.4),
+                    **chart_config
                 )
-                st.pyplot(chart_figure)
-            except ValueError as e:
-                st.error(str(e))
-    else:
-        # Select TDI customer
-        tdi_customer_name = st.selectbox("Select Customer TDI", df_tdi['customer'].unique())
-        if st.button("Plot TDI Demand"):
-            try:
-                df = df_tdi[df_tdi['customer'] == tdi_customer_name]
-                max_demand = df['demand'].max()
-                chart_figure = drawchat.plot_customer_demand1(
-                    df=df_tdi,
-                    customer_name=tdi_customer_name,
-                    customer_column='customer',
-                    suppliers=tdi_suppliers,
-                    demand_ylim=(0, max_demand*1.4),
-                    title_fontsize=20, axis_label_fontsize=16,
-                    tick_fontsize=16, legend_fontsize=12,
-                    legend_title_fontsize=18, value_label_fontsize=14,
-                    demand_label_fontsize=18
-                )
-                st.pyplot(chart_figure)
-            except ValueError as e:
-                st.error(str(e))
-
-def Visual_account_price_volume(type_material, df_mdi, df_tdi):
-    if type_material == 'MDI':
-        mdi_customer_name = st.selectbox("Select Customer MDI", df_mdi['customer'].unique())
-        if st.button("Plot MDI Demand"):
-            try:
-                df = df_mdi[df_mdi['customer'] == mdi_customer_name]
-                max_demand = df['demand'].max()
-                max_price = df['pocket price'].max()
+            elif chart_type == "Account price vs Volume":
+                if 'demand' not in df.columns or 'pocket price' not in df.columns:
+                    st.error("Required 'demand' or 'pocket price' column not found in DataFrame")
+                    return
+                max_demand = df_filtered['demand'].max() if not df_filtered.empty else 0
+                max_price = df_filtered['pocket price'].max() if not df_filtered.empty else 0
+                price_columns = ['pocket price', 'apac_pp'] if material == 'TDI' else ['pocket price', 'seap_pp', 'apac_pp']
+                price_colors = ['red', 'green'] if material == 'TDI' else ['red', 'green', 'blue']
                 chart_figure = drawchat.plot_customer_demand_with_price(
-                    df_mdi, mdi_customer_name, 'customer',
-                    covestro_supplier,
-                    demand_ylim=(0, max_demand*2),
-                    price_ylim=(0.5, max_price*1.5),
-                    price_columns=['pocket price', 'seap_pp', 'apac_pp'],
-                    price_colors=['red', 'green', 'blue'],
-                    title_fontsize=22, axis_label_fontsize=20,
-                    tick_fontsize=18, legend_fontsize=16,
-                    legend_title_fontsize=16, value_label_fontsize=18,
-                    price_annotation_fontsize=16,
-                    annotation_spacing=25
+                    df, customer_name, 'customer',
+                    config.SUPPLIERS['covestro'],
+                    demand_ylim=(0, max_demand * 2),
+                    price_ylim=(0.5, max_price * 1.5),
+                    price_columns=price_columns,
+                    price_colors=price_colors,
+                    **chart_config
                 )
-                st.pyplot(chart_figure)
-            except ValueError as e:
-                st.error(str(e))
-    else:
-        tdi_customer_name = st.selectbox("Select Customer TDI", df_tdi['customer'].unique())
-        if st.button("Plot TDI Demand"):
-            try:
-                df = df_tdi[df_tdi['customer'] == tdi_customer_name]
-                max_demand = df['demand'].max()
-                max_price = df['pocket price'].max()
-                chart_figure = drawchat.plot_customer_demand_with_price(
-                    df_tdi, tdi_customer_name, 'customer',
-                    covestro_supplier,
-                    demand_ylim=(0, max_demand*2),
-                    price_ylim=(0.5, max_price*1.5),
-                    price_columns=['pocket price', 'apac_pp'],
-                    price_colors=['red', 'green'],
-                    title_fontsize=22, axis_label_fontsize=20,
-                    tick_fontsize=18, legend_fontsize=16,
-                    legend_title_fontsize=16, value_label_fontsize=18,
-                    price_annotation_fontsize=16,
-                    annotation_spacing=25
-                )
-                st.pyplot(chart_figure)
-            except ValueError as e:
-                st.error(str(e))
-
-def Visual_business_plan(type_material, df_mdi_BP, df_tdi_BP):
-    if type_material == 'MDI':
-        mdi_customer_name = st.selectbox("Select Customer MDI", df_mdi_BP['customer'].unique())
-        if st.button("Plot MDI Demand"):
-            try:
+            else:  # Business plan
                 chart_figure = drawchat.plot_customer_business_plan(
-                    df_mdi_BP, mdi_customer_name, show_percentages=False,
-                    title_fontsize=22, axis_label_fontsize=20,
-                    tick_fontsize=20, legend_fontsize=18,
-                    value_label_fontsize=16
+                    df, customer_name, show_percentages=False,
+                    **chart_config
                 )
-                st.pyplot(chart_figure)
-            except ValueError as e:
-                st.error(str(e))
-    else:
-        tdi_customer_name = st.selectbox("Select Customer TDI", df_tdi_BP['customer'].unique())
-        if st.button("Plot TDI Demand"):
-            try:
-                chart_figure = drawchat.plot_customer_business_plan(
-                    df_tdi_BP, tdi_customer_name, show_percentages=False,
-                    title_fontsize=22, axis_label_fontsize=20,
-                    tick_fontsize=20, legend_fontsize=18,
-                    value_label_fontsize=16
-                )
-                st.pyplot(chart_figure)
-            except ValueError as e:
-                st.error(str(e))
+            st.pyplot(chart_figure)
+        except ValueError as e:
+            st.error(f"Error generating plot: {str(e)}")
+        except Exception as e:
+            st.error(f"Unexpected error: {str(e)}")
 
-##############################################################################
-# TAIWAN VISUALIZATION
-##############################################################################
-
-def Visual_TW_customer_demand(df_tdi):
-        tdi_customer_name = st.selectbox("Select Customer TDI", df_tdi['customer'].unique())
-        if st.button("Plot TDI Demand"):
-            try:
-                df = df_tdi[df_tdi['customer'] == tdi_customer_name]
-                max_demand = df['demand'].max()
-                chart_figure = drawchat.plot_customer_demand1(
-                    df=df_tdi,
-                    customer_name=tdi_customer_name,
-                    customer_column='customer',
-                    suppliers=tdi_suppliers,
-                    demand_ylim=(0, max_demand*1.4),
-                    title_fontsize=20, axis_label_fontsize=16,
-                    tick_fontsize=16, legend_fontsize=12,
-                    legend_title_fontsize=18, value_label_fontsize=14,
-                    demand_label_fontsize=18
-                )
-                st.pyplot(chart_figure)
-            except ValueError as e:
-                st.error(str(e))
-def Visual_TW_account_price_volume(df_tdi):
-        tdi_customer_name = st.selectbox("Select Customer TDI", df_tdi['customer'].unique())
-        if st.button("Plot TDI Demand"):
-            try:
-                df = df_tdi[df_tdi['customer'] == tdi_customer_name]
-                max_demand = df['demand'].max()
-                max_price = df['pocket price'].max()
-                chart_figure = drawchat.plot_customer_demand_with_price(
-                    df_tdi, tdi_customer_name, 'customer',
-                    covestro_supplier,
-                    demand_ylim=(0, max_demand*2),
-                    price_ylim=(0.5, max_price*1.5),
-                    price_columns=['pocket price', 'apac_pp'],
-                    price_colors=['red', 'green'],
-                    title_fontsize=22, axis_label_fontsize=20,
-                    tick_fontsize=18, legend_fontsize=16,
-                    legend_title_fontsize=16, value_label_fontsize=18,
-                    price_annotation_fontsize=16,
-                    annotation_spacing=25
-                )
-                st.pyplot(chart_figure)
-            except ValueError as e:
-                st.error(str(e))
-def Visual_TW_business_plan(df_tdi_BP):
-        tdi_customer_name = st.selectbox("Select Customer TDI", df_tdi_BP['customer'].unique())
-        if st.button("Plot TDI Demand"):
-            try:
-                chart_figure = drawchat.plot_customer_business_plan(
-                    df_tdi_BP, tdi_customer_name, show_percentages=False,
-                    title_fontsize=22, axis_label_fontsize=20,
-                    tick_fontsize=20, legend_fontsize=18,
-                    value_label_fontsize=16
-                )
-                st.pyplot(chart_figure)
-            except ValueError as e:
-                st.error(str(e))    
-if __name__ == "__main__":
-    st.set_page_config(page_title="MDI and TDI Visualization")
+def setup_page():
+    """Setup Streamlit page configuration"""
+    st.set_page_config(page_title="MDI and TDI Visualization", layout="wide")
     st.sidebar.title("Navigation")
-    type_country = st.sidebar.selectbox("Select Country", ["Vietnam", "Taiwan"], index=0)
-    if type_country == "Vietnam":
-        st.sidebar.subheader("Vietnam Data")
-        type_chart = st.sidebar.radio("Select type of chart", ["Customer Demand", "Account price vs Volume", "Business plan"], index=0)
-        type_material = st.sidebar.selectbox("Select Customer MDI or TDI", ["TDI", "MDI"], index=0)
 
-        # Sidebar for data source selection
-        data_source = st.sidebar.radio("Select Data Source", ["Default Files", "Upload New Files"], index=0)
-
-        # Initialize dataframes
-        df_mdi, df_mdi_BP, df_tdi, df_tdi_BP = load_default_data()
-
-        if data_source == "Upload New Files":
-            st.sidebar.subheader("Upload MDI Files")
-            mdi_file = st.sidebar.file_uploader("Upload MDI Customer Data (CSV)", key="mdi_file")
-            mdi_bp_file = st.sidebar.file_uploader("Upload MDI Business Plan (CSV)", key="mdi_bp_file")
-            
-            st.sidebar.subheader("Upload TDI Files")
-            tdi_file = st.sidebar.file_uploader("Upload TDI Customer Data (CSV)", key="tdi_file")
-            tdi_bp_file = st.sidebar.file_uploader("Upload TDI Business Plan (CSV)", key="tdi_bp_file")
-
-            # Load uploaded files if provided
-            if mdi_file is not None:
-                try:
-                    df_mdi = pd.read_csv(mdi_file)
-                    st.sidebar.success("MDI Customer Data uploaded successfully!")
-                except Exception as e:
-                    st.sidebar.error(f"Error uploading MDI Customer Data: {e}")
-            
-            if mdi_bp_file is not None:
-                try:
-                    df_mdi_BP = pd.read_csv(mdi_bp_file)
-                    st.sidebar.success("MDI Business Plan uploaded successfully!")
-                except Exception as e:
-                    st.sidebar.error(f"Error uploading MDI Business Plan: {e}")
-            
-            if tdi_file is not None:
-                try:
-                    df_tdi = pd.read_csv(tdi_file)
-                    st.sidebar.success("TDI Customer Data uploaded successfully!")
-                except Exception as e:
-                    st.sidebar.error(f"Error uploading TDI Customer Data: {e}")
-            
-            if tdi_bp_file is not None:
-                try:
-                    df_tdi_BP = pd.read_csv(tdi_bp_file)
-                    st.sidebar.success("TDI Business Plan uploaded successfully!")
-                except Exception as e:
-                    st.sidebar.error(f"Error uploading TDI Business Plan: {e}")
-
-        st.title(f"The chart for {type_chart}")
-
-        # Call visualization functions with loaded data
-        if type_chart == 'Customer Demand':
-            Visual_customer_demand(type_material, df_mdi, df_tdi)
-        elif type_chart == 'Account price vs Volume':
-            Visual_account_price_volume(type_material, df_mdi, df_tdi)
-        else:
-            Visual_business_plan(type_material, df_mdi_BP, df_tdi_BP)
+def main():
+    """Main application logic"""
+    config = Config()
+    setup_page()
+    
+    # Sidebar controls
+    type_country = st.sidebar.selectbox("Select Country", config.COUNTRIES)
+    type_chart = st.sidebar.radio("Select type of chart", config.CHART_TYPES)
+    is_vietnam = type_country == "Vietnam"
+    
+    if is_vietnam:
+        type_material = st.sidebar.selectbox("Select Material", config.MATERIALS)
     else:
-        st.sidebar.subheader("Taiwan Data")
-        type_chart = st.sidebar.radio("Select type of chart", ["Customer Demand", "Account price vs Volume", "Business plan"], index=0)
-       
-
-        # Load default data for Taiwan
-        #df_tdi_TW_BP = pd.read_csv(DEFAULT_TW_TDI_BP_PATH)
-        #df_tdi_TW = pd.read_csv(DEFAULT_TW_TDI_PATH)
+        type_material = "TDI"  # Taiwan only supports TDI
         
-         # Initialize dataframes
-         
-        df_tdi_TW_BP, df_tdi_TW = load_tw_data()
+    data_source = st.sidebar.radio("Select Data Source", ["Default Files", "Upload New Files"]) if is_vietnam else "Default Files"
+    
+    # Load data
+    if is_vietnam:
+        df_mdi, df_mdi_bp, df_tdi, df_tdi_bp = DataLoader.load_country_data("Vietnam", config)
         
-
-        st.title(f"The chart for {type_chart}")
-
-        # Call visualization functions with loaded data 
-        if type_chart == 'Customer Demand':
-            Visual_TW_customer_demand(df_tdi_TW)
-        elif type_chart == 'Account price vs Volume':
-            Visual_TW_account_price_volume(df_tdi_TW)
-        else:
-            Visual_TW_business_plan(df_tdi_TW_BP)
+        if data_source == "Upload New Files":
+            st.sidebar.subheader("Upload Files")
+            for key, label in [('mdi', 'MDI Customer Data'), ('mdi_bp', 'MDI Business Plan'),
+                             ('tdi', 'TDI Customer Data'), ('tdi_bp', 'TDI Business Plan')]:
+                uploaded_file = st.sidebar.file_uploader(f"Upload {label} (CSV)", key=f"{key}_file")
+                if uploaded_file:
+                    locals()[f"df_{key}"] = DataLoader.load_csv("", uploaded_file)
+    else:
+        df_tdi_bp, df_tdi = DataLoader.load_country_data("Taiwan", config)
     
+    # Set page title
+    st.title(f"{type_chart} Visualization")
     
+    # Select appropriate dataframe based on chart type and material
+    df = (df_tdi if type_material == 'TDI' else df_mdi) if type_chart != "Business plan" else \
+         (df_tdi_bp if type_material == 'TDI' else df_mdi_bp)
+    
+    # Render visualization
+    if not df.empty:
+        customer_name = st.selectbox(f"Select Customer {type_material}", df['customer'].unique())
+        if st.button(f"Plot {type_chart} for {customer_name}"):
+            Visualizer.plot_chart(type_chart, df, customer_name, type_material, config, not is_vietnam)
+    else:
+        st.error("No data available to display. Please check your data files.")
+
+if __name__ == "__main__":
+    main()
